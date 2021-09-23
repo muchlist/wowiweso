@@ -1,11 +1,17 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/CloudyKit/jet/v6"
 	"github.com/gorilla/websocket"
+)
+
+var (
+	wsChan  = make(chan WsPayload)
+	clients = make(map[WebSocketConnection]string)
 )
 
 var views = jet.NewSet(
@@ -21,18 +27,30 @@ var upgradeConnection = websocket.Upgrader{
 	},
 }
 
-func Home(w http.ResponseWriter, r *http.Request) {
+func Home(w http.ResponseWriter, _ *http.Request) {
 	err := renderPage(w, "home.jet", nil)
 	if err != nil {
 		log.Println(err)
 	}
 }
 
-// WsJsonResponse radalah respon dari websocket
+type WebSocketConnection struct {
+	*websocket.Conn
+}
+
+// WsJsonResponse adalah respon dari websocket
 type WsJsonResponse struct {
 	Action      string `json:"action"`
 	Message     string `json:"message"`
 	Messagetype string `json:"message_type"`
+}
+
+// WsPayload
+type WsPayload struct {
+	Action   string              `json:"action"`
+	Username string              `json:"username"`
+	Message  string              `json:"message"`
+	Conn     WebSocketConnection `json:"-"`
 }
 
 // WsEndpoint upgrade koneksi ke websocket
@@ -46,9 +64,56 @@ func WsEndpoint(w http.ResponseWriter, r *http.Request) {
 	var response WsJsonResponse
 	response.Message = `<em><small>Terkoneksi ke server</small></em>`
 
+	conn := WebSocketConnection{Conn: ws}
+	clients[conn] = ""
+
 	err = ws.WriteJSON(response)
 	if err != nil {
 		log.Println(err)
+	}
+
+	go ListenForWs(&conn)
+}
+
+func ListenForWs(conn *WebSocketConnection) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("Error", fmt.Sprintf("%v", r))
+		}
+	}()
+
+	var payload WsPayload
+	for {
+		err := conn.ReadJSON(&payload)
+		if err != nil {
+			// do nothing
+		} else {
+			payload.Conn = *conn
+			wsChan <- payload
+		}
+	}
+}
+
+func ListenToWsChannel() {
+	var response WsJsonResponse
+
+	for {
+		e := <-wsChan
+		response.Action = "Got Here"
+		response.Message = fmt.Sprintf("Some message, and action was %s", e.Action)
+		broadcastToAll(response)
+	}
+}
+
+func broadcastToAll(response WsJsonResponse) {
+	for client := range clients {
+		err := client.WriteJSON(response)
+		if err != nil {
+			log.Println("web socket err")
+			_ = client.Close()
+			delete(clients, client)
+		}
+
 	}
 }
 
