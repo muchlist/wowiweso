@@ -124,12 +124,14 @@ func ListenToWsChannel() {
 }
 
 func getUserList() []string {
-	var userlist []string
+	var userList []string
 	for _, x := range clients {
-		userlist = append(userlist, x)
+		if x != "" {
+			userList = append(userList, x)
+		}
 	}
-	sort.Strings(userlist)
-	return userlist
+	sort.Strings(userList)
+	return userList
 }
 
 func broadcastToAll(response WsJsonResponse) {
