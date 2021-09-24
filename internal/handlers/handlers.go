@@ -39,11 +39,11 @@ type WebSocketConnection struct {
 	*websocket.Conn
 }
 
-// WsJsonResponse adalah respon dari websocket
+// WsJsonResponse adalah respon dari websocket ke client
 type WsJsonResponse struct {
 	Action         string   `json:"action"`
 	Message        string   `json:"message"`
-	Messagetype    string   `json:"message_type"`
+	MessageType    string   `json:"message_type"`
 	ConnectedUsers []string `json:"connected_users"`
 }
 
@@ -77,6 +77,8 @@ func WsEndpoint(w http.ResponseWriter, r *http.Request) {
 	go ListenForWs(&conn)
 }
 
+// ListenForWs membaca apapun yang dikirimkan ke websocket oleh client
+// satu koneksi client akan memiliki satu goroutine yang menjalankan ListenForWs
 func ListenForWs(conn *WebSocketConnection) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -86,6 +88,7 @@ func ListenForWs(conn *WebSocketConnection) {
 
 	var payload WsPayload
 	for {
+		// untuk setiap koneksi baru baca payloadnya dan masukkan ke channel wsChan
 		err := conn.ReadJSON(&payload)
 		if err != nil {
 			// do nothing
@@ -96,6 +99,8 @@ func ListenForWs(conn *WebSocketConnection) {
 	}
 }
 
+// ListenToWsChannel melakukan loop serus menerus dengan memonitoring channel wsChan
+// wsChan akan di isi pada func ListenForWs
 func ListenToWsChannel() {
 	var response WsJsonResponse
 
@@ -148,7 +153,6 @@ func broadcastToAll(response WsJsonResponse) {
 			_ = client.Close()
 			delete(clients, client)
 		}
-
 	}
 }
 
